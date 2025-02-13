@@ -1,7 +1,7 @@
 ;;;; Codes are taken from Caten (https://github.com/hikettei/Caten/blob/main/source/byoc/metal.lisp)
 (defpackage :libmetal
   (:use :cl :cffi :float-features)
-  (:export :mcompile))
+  (:export #:mcompile #:defmkernel))
 (in-package :libmetal)
 ;; ~~ CFFI Utils ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 (defconstant +request-type-compile+ 13)
@@ -12,6 +12,8 @@
   (load-foreign-library "/System/Library/PrivateFrameworks/MTLCompiler.framework/MTLCompiler")
   (load-foreign-library "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
   (load-foreign-library "/usr/lib/libSystem.dylib"))
+
+(ensure-foreign-library)
 
 (defcfun "MTLCreateSystemDefaultDevice" :pointer)
 (defcfun "sel_registerName" :pointer (name :pointer))
@@ -255,10 +257,20 @@ using namespace metal;
 ;; ~~ Entry Point ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 (defun mcompile (fname source &key (grid-size `(1 1 1)) (thread-size `(1 1 1)))
   (declare (type string fname source))
-  (ensure-foreign-library)
   (with-float-traps-masked t
     (let* ((lib (mtl-compile-source source))
            (device (MTLCreateSystemDefaultDevice))
            (mtl-queue (msg device "newCommandQueueWithMaxCommandBufferCount:" :pointer :int 1024)))
       (make-instance
        'Metal-Program :lib lib :name fname :device device :mtl-queue mtl-queue :global-size grid-size :local-size thread-size))))
+
+(defmacro defmkernel ((fname lisp-name) source)
+  `(defun ,lisp-name (&key (grid-size '(1 1 1)) (thread-size '(1 1 1)))
+     (mcompile ,fname ,source :grid-size grid-size :thread-size thread-size)))
+;; ~~ MPS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+;; ~~ Utils ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(defmethod profile-on-gemm ((prg Metal-Program))
+  ;; N moves from zero to max
+  ;; Finally compares the result w/ numcl
+  )
